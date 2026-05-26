@@ -4,47 +4,32 @@
 
     <script>
       google.charts.load('current', { packages: ['sankey'] });
+      google.charts.setOnLoadCallback(loadData);
 
-      google.charts.setOnLoadCallback(init);
+      function clean(v) {
+        return (v || "").toString().trim();
+      }
 
-      async function init() {
-        // Experience Builder injects the map view in most widget setups
-        // If not, you may need to replace this with this.view / props.view depending on widget type
+      async function loadData() {
 
-        const view = window._view || window.view || null;
+        const url =
+          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+          "?where=1%3D1" +
+          "&outFields=Herkomst_land,Bestemming_Land" +
+          "&returnGeometry=false" +
+          "&f=json";
 
-        if (!view || !view.map) {
-          document.getElementById("sankey").innerHTML =
-            "Map view not available in this context.";
-          return;
-        }
-
-        // 🔥 Get feature layer from web map (no URL)
-        const layer =
-          view.map.allLayers.find(l => l.type === "feature");
-
-        if (!layer) {
-          document.getElementById("sankey").innerHTML =
-            "No feature layer found in web map.";
-          return;
-        }
-
-        await view.whenLayerView(layer);
-
-        const fs = await layer.queryFeatures({
-          where: "1=1",
-          outFields: ["Herkomst_land", "Bestemming_Land"],
-          returnGeometry: false
-        });
+        const response = await fetch(url);
+        const json = await response.json();
 
         const map = new Map();
 
-        fs.features.forEach(f => {
+        json.features.forEach(f => {
 
           const a = f.attributes;
 
-          const from = (a.Herkomst_land || "").toString().trim();
-          const to = (a.Bestemming_Land || "").toString().trim();
+          const from = clean(a.Herkomst_land);
+          const to = clean(a.Bestemming_Land);
 
           if (!from || !to) return;
 
@@ -58,14 +43,6 @@
           return [from, to, v];
         });
 
-        console.log("Sankey rows:", rows.length);
-
-        if (rows.length === 0) {
-          document.getElementById("sankey").innerHTML =
-            "No valid data found.";
-          return;
-        }
-
         const data = new google.visualization.DataTable();
         data.addColumn('string', 'From');
         data.addColumn('string', 'To');
@@ -78,14 +55,7 @@
 
         chart.draw(data, {
           width: 1200,
-          height: 800,
-          sankey: {
-            node: {
-              label: {
-                fontSize: 12
-              }
-            }
-          }
+          height: 800
         });
       }
     </script>
