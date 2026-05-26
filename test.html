@@ -1,114 +1,151 @@
 <html>
 <head>
   <meta charset="utf-8" />
-
-  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
-  <script src="https://js.arcgis.com/4.29/"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
 
   <style>
-    html, body, #viewDiv {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      width: 100%;
+    body { margin: 0; overflow: hidden; }
+    svg { width: 100vw; height: 100vh; background: #fafafa; }
+
+    line {
+      stroke-opacity: 0.7;
+    }
+
+    circle {
+      fill: #1f77b4;
+    }
+
+    text {
+      font-size: 10px;
+      pointer-events: none;
     }
   </style>
-
-  <script>
-    require([
-      "esri/Map",
-      "esri/views/MapView",
-      "esri/Graphic",
-      "esri/layers/GraphicsLayer"
-    ], function(Map, MapView, Graphic, GraphicsLayer) {
-
-      const url =
-        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2";
-
-      const graphicsLayer = new GraphicsLayer();
-
-      const map = new Map({
-        basemap: "gray-vector",
-        layers: [graphicsLayer]
-      });
-
-      const view = new MapView({
-        container: "viewDiv",
-        map: map,
-        center: [5, 52],
-        zoom: 4
-      });
-
-      // Simple deterministic “country position generator”
-      function getCoord(name) {
-        let hash = 0;
-        for (let i = 0; i < name.length; i++) {
-          hash = name.charCodeAt(i) + ((hash << 5) - hash);
-        }
-
-        const lon = (hash % 360) - 180;
-        const lat = (hash % 160) - 80;
-
-        return [lon, lat];
-      }
-
-      function clean(v) {
-        return (v || "").toString().trim();
-      }
-
-      fetch(url + "/query?where=1%3D1&outFields=Herkomst_land,Bestemming_Land,Lading&returnGeometry=false&f=json")
-        .then(res => res.json())
-        .then(data => {
-
-          const flows = new Map();
-
-          // aggregate flows
-          data.features.forEach(f => {
-
-            const a = f.attributes;
-
-            const from = clean(a.Herkomst_land);
-            const to = clean(a.Bestemming_Land);
-            const value = Number(a.Lading) || 1;
-
-            if (!from || !to) return;
-
-            const key = from + "->" + to;
-            flows.set(key, (flows.get(key) || 0) + value);
-          });
-
-          // draw lines
-          flows.forEach((value, key) => {
-
-            const [from, to] = key.split("->");
-
-            const polyline = {
-              type: "polyline",
-              paths: [[
-                getCoord(from),
-                getCoord(to)
-              ]]
-            };
-
-            const graphic = new Graphic({
-              geometry: polyline,
-              symbol: {
-                type: "simple-line",
-                color: [0, 120, 255, 0.6],
-                width: Math.max(1, value / 20)
-              }
-            });
-
-            graphicsLayer.add(graphic);
-          });
-
-        });
-
-    });
-  </script>
 </head>
 
 <body>
-  <div id="viewDiv"></div>
+<svg></svg>
+
+<script>
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const svg = d3.select("svg");
+const g = svg.append("g");
+
+const url =
+  "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+  "?where=1%3D1" +
+  "&outFields=UNLO_Herkomst,UNLO_Bestemming,Goederentype,Lading" +
+  "&returnGeometry=false&f=json";
+
+function clean(v) {
+  return (v || "").toString().trim();
+}
+
+// color scale for Goederentype
+const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+fetch(url)
+  .then(r => r.json())
+  .then(data => {
+
+    const nodesSet = new Set();
+
+    // key = from|to|type
+    const linksMap = new Map();
+
+    data.features.forEach(f => {
+
+      const a = f.attributes;
+
+      const source = clean(a.UNLO_Herkomst);
+      const target = clean(a.UNLO_Bestemming);
+      const type = clean(a.Goederentype);
+      const value = Number(a.Lading) || 1;
+
+      if (!source || !target) return;
+
+      nodesSet.add(source);
+      nodesSet.add(target);
+
+      const key = source + "|" + target + "|" + type;
+
+      linksMap.set(key, (linksMap.get(key) || 0) + value);
+    });
+
+    const nodes = Array.from(nodesSet).map(d => ({ id: d }));
+
+    const links = Array.from(linksMap.entries()).map(([k, v]) => {
+      const [source, target, type] = k.split("|");
+      return { source, target, type, value: v };
+    });
+
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(120))
+      .force("charge", d3.forceManyBody().strength(-250))
+      .force("center", d3.forceCenter(width / 2, height / 2));
+
+    const link = g.selectAll("line")
+      .data(links)
+      .enter()
+      .append("line")
+      .attr("stroke", d => color(d.type))
+      .attr("stroke-width", d => Math.max(1, d.value / 5));
+
+    const node = g.selectAll("circle")
+      .data(nodes)
+      .enter()
+      .append("circle")
+      .attr("r", 6)
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended));
+
+    const label = g.selectAll("text")
+      .data(nodes)
+      .enter()
+      .append("text")
+      .text(d => d.id);
+
+    simulation.on("tick", () => {
+
+      link
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      node
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y);
+
+      label
+        .attr("x", d => d.x + 8)
+        .attr("y", d => d.y + 3);
+
+    });
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+  });
+
+</script>
 </body>
 </html>
