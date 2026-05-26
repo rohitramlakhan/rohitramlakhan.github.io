@@ -4,10 +4,9 @@
 
     <script>
       google.charts.load('current', { packages: ['sankey'] });
+      google.charts.setOnLoadCallback(loadData);
 
-      google.charts.setOnLoadCallback(loadAndDraw);
-
-      async function loadAndDraw() {
+      async function loadData() {
 
         const url =
           "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
@@ -19,31 +18,39 @@
         const response = await fetch(url);
         const json = await response.json();
 
-        console.log("Features loaded:", json.features.length);
-
-        const rows = [];
+        const map = new Map();
 
         json.features.forEach(f => {
 
           const a = f.attributes;
 
-          const from = (a.Herkomst_land || "").trim();
-          const to = (a.Bestemming_Land || "").trim();
+          let from = (a.Herkomst_land || "").trim();
+          let to = (a.Bestemming_Land || "").trim();
 
-          // safety checks
           if (!from || !to) return;
 
-          rows.push([from, to, 1]);
+          // 🔴 FIX 1: enforce stable direction (prevents A↔B cycles)
+          const key =
+            from < to
+              ? from + "->" + to
+              : to + "->" + from;
+
+          // 🔴 FIX 2: ensure no duplicates
+          map.set(key, {
+            from: key.split("->")[0],
+            to: key.split("->")[1],
+            value: (map.get(key)?.value || 0) + 1
+          });
+
         });
 
-        console.log("Rows for Sankey:", rows.length);
+        const rows = Array.from(map.values()).map(d => [
+          d.from,
+          d.to,
+          d.value
+        ]);
 
-        // IMPORTANT: prevent empty chart crash
-        if (rows.length === 0) {
-          document.getElementById("sankey").innerHTML =
-            "No valid data found";
-          return;
-        }
+        console.log("ROWS:", rows.length);
 
         const data = new google.visualization.DataTable();
         data.addColumn('string', 'From');
