@@ -1,86 +1,36 @@
 <html>
   <head>
-    <script src="https://www.gstatic.com/charts/loader.js"></script>
-
-    <script>
-      google.charts.load('current', { packages: ['sankey'] });
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+      google.charts.load('current', {'packages':['sankey']});
       google.charts.setOnLoadCallback(drawChart);
 
-      async function drawChart() {
-
-        const url =
-          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-          "?where=1%3D1" +
-          "&outFields=UNLO_Herkomst,UNLO_Bestemming,Lading" +
-          "&returnGeometry=false" +
-          "&f=json";
-
-        const response = await fetch(url);
-        const json = await response.json();
-
-        // 🔥 Aggregate flows to avoid duplicates
-        const flowMap = {};
-
-        json.features.forEach(f => {
-
-          const a = f.attributes;
-
-          const from = (a.UNLO_Herkomst || "").trim();
-          const to = (a.UNLO_Bestemming || "").trim();
-          const value = Number(a.Lading);
-
-          // skip invalid rows
-          if (!from || !to || isNaN(value)) return;
-
-          // key ensures aggregation per route
-          const key = from + "->" + to;
-
-          if (!flowMap[key]) {
-            flowMap[key] = {
-              from: from,
-              to: to,
-              value: 0
-            };
-          }
-
-          flowMap[key].value += value;
-        });
-
-        // convert to Sankey format
-        const rows = Object.values(flowMap).map(d => [
-          d.from,
-          d.to,
-          d.value
-        ]);
-
-        const data = new google.visualization.DataTable();
+      function drawChart() {
+        var data = new google.visualization.DataTable();
         data.addColumn('string', 'From');
         data.addColumn('string', 'To');
         data.addColumn('number', 'Weight');
-        data.addRows(rows);
+        data.addRows([
+          [ 'A', 'X', 5 ],
+          [ 'A', 'Y', 7 ],
+          [ 'A', 'Z', 6 ],
+          [ 'B', 'X', 2 ],
+          [ 'B', 'Y', 9 ],
+          [ 'B', 'Z', 4 ]
+        ]);
 
-        const options = {
-          width: 1200,
-          height: 800,
-          sankey: {
-            node: {
-              label: {
-                fontSize: 12
-              }
-            }
-          }
+        // Sets chart options.
+        var options = {
+          width: 600,
         };
 
-        const chart = new google.visualization.Sankey(
-          document.getElementById('sankey')
-        );
-
+        // Instantiates and draws our chart, passing in some options.
+        var chart = new google.visualization.Sankey(document.getElementById('sankey_basic'));
         chart.draw(data, options);
       }
     </script>
   </head>
-
-  <body style="margin:0;">
-    <div id="sankey" style="width:100%; height:800px;"></div>
+  <body>
+    <div id="sankey_basic" style="width: 900px; height: 300px;"></div>
   </body>
 </html>
