@@ -1,110 +1,64 @@
-<!DOCTYPE html>
 <html>
+  <head>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 
-<head>
-  <meta charset="utf-8">
+    <script type="text/javascript">
+      google.charts.load('current', {'packages':['sankey']});
+      google.charts.setOnLoadCallback(drawChart);
 
-  <script src="https://www.gstatic.com/charts/loader.js"></script>
+      async function drawChart() {
 
-  <script>
-
-    google.charts.load('current', {
-      packages: ['sankey']
-    });
-
-    google.charts.setOnLoadCallback(loadData);
-
-    async function loadData() {
-
-      const url =
-        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-        "?where=1%3D1" +
-        "&outFields=UNLO_Herkomst,UNLO_Bestemming,Goederentype,Lading" +
-        "&returnGeometry=false" +
-        "&f=json";
-
-      const response = await fetch(url);
-
-      const json = await response.json();
-
-      const rows = [];
-
-      json.features.forEach(feature => {
-
-        const a = feature.attributes;
-
-        const herkomst = a.UNLO_Herkomst || "Unknown";
-        const bestemming = a.UNLO_Bestemming || "Unknown";
-        const goederen = a.Goederentype || "Unknown";
-        const lading = Number(a.Lading) || 0;
-
-        // Step 1:
-        // Herkomst -> Goederentype
-        rows.push([
-          herkomst,
-          goederen,
-          lading
-        ]);
-
-        // Step 2:
-        // Goederentype -> Bestemming
-        rows.push([
-          goederen,
-          bestemming,
-          lading
-        ]);
-
-      });
-
-      drawChart(rows);
-    }
-
-    function drawChart(rows) {
-
-      const data =
-        new google.visualization.DataTable();
-
-      data.addColumn('string', 'From');
-      data.addColumn('string', 'To');
-      data.addColumn('number', 'Weight');
-
-      data.addRows(rows);
-
-      const options = {
-
-        height: 800,
-
-        sankey: {
-          node: {
-            label: {
-              fontSize: 14
-            }
-          }
-        }
-
-      };
-
-      const chart =
-        new google.visualization.Sankey(
-          document.getElementById('sankey')
+        const response = await fetch(
+          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query?where=1%3D1&outFields=UNLO_Herkomst,UNLO_Bestemming,Goederentype,Lading&returnGeometry=false&f=json"
         );
 
-      chart.draw(data, options);
-    }
+        const json = await response.json();
 
-    // Redraw on resize
-    window.addEventListener('resize', loadData);
+        var rows = [];
 
-  </script>
+        json.features.forEach(function(feature) {
 
-</head>
+          var a = feature.attributes;
 
-<body style="margin:0; padding:0;">
+          rows.push([
+            a.UNLO_Herkomst,
+            a.Goederentype,
+            Number(a.Lading)
+          ]);
 
-  <div id="sankey"
-       style="width:100%; height:100vh;">
-  </div>
+          rows.push([
+            a.Goederentype,
+            a.UNLO_Bestemming,
+            Number(a.Lading)
+          ]);
 
-</body>
+        });
 
+        var data = new google.visualization.DataTable();
+
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Weight');
+
+        data.addRows(rows);
+
+        // Sets chart options.
+        var options = {
+          width: 900,
+          height: 600
+        };
+
+        // Instantiates and draws our chart, passing in some options.
+        var chart = new google.visualization.Sankey(
+          document.getElementById('sankey_basic')
+        );
+
+        chart.draw(data, options);
+      }
+    </script>
+  </head>
+
+  <body>
+    <div id="sankey_basic" style="width: 900px; height: 600px;"></div>
+  </body>
 </html>
