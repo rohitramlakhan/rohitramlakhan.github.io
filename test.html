@@ -1,76 +1,111 @@
 <html>
-  <head>
-    <script src="https://www.gstatic.com/charts/loader.js"></script>
+<head>
+  <meta charset="utf-8" />
 
-    <script>
-      google.charts.load('current', { packages: ['sankey'] });
-      google.charts.setOnLoadCallback(loadData);
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.29/"></script>
 
-      async function loadData() {
+  <style>
+    html, body, #viewDiv {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
 
-        const url =
-          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-          "?where=1%3D1" +
-          "&outFields=Herkomst_land,Bestemming_Land" +
-          "&returnGeometry=false" +
-          "&f=json";
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/GraphicsLayer",
+      "esri/Graphic"
+    ], function(Map, MapView, GraphicsLayer, Graphic) {
 
-        const response = await fetch(url);
-        const json = await response.json();
+      const layerUrl =
+        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2";
 
-        const map = new Map();
+      const graphicsLayer = new GraphicsLayer();
 
-        json.features.forEach(f => {
+      const map = new Map({
+        basemap: "gray-vector",
+        layers: [graphicsLayer]
+      });
 
-          const a = f.attributes;
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [5.29, 52.13],
+        zoom: 5
+      });
 
-          let from = (a.Herkomst_land || "").trim();
-          let to = (a.Bestemming_Land || "").trim();
+      function getPoint(seed) {
+        // deterministic fake positions per country
+        let hash = 0;
+        for (let i = 0; i < seed.length; i++) {
+          hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+        }
 
-          if (!from || !to) return;
+        const x = 5 + (hash % 100) / 10;
+        const y = 50 + (hash % 60) / 10;
 
-          // 🔴 FIX 1: enforce stable direction (prevents A↔B cycles)
-          const key =
-            from < to
-              ? from + "->" + to
-              : to + "->" + from;
+        return [x, y];
+      }
 
-          // 🔴 FIX 2: ensure no duplicates
-          map.set(key, {
-            from: key.split("->")[0],
-            to: key.split("->")[1],
-            value: (map.get(key)?.value || 0) + 1
+      fetch(layerUrl + "/query?where=1%3D1&outFields=Herkomst_land,Bestemming_Land,Lading&returnGeometry=false&f=json")
+        .then(res => res.json())
+        .then(data => {
+
+          const flows = {};
+
+          data.features.forEach(f => {
+
+            const a = f.attributes;
+
+            const from = (a.Herkomst_land || "").trim();
+            const to = (a.Bestemming_Land || "").trim();
+            const value = Number(a.Lading) || 1;
+
+            if (!from || !to) return;
+
+            const key = from + "->" + to;
+
+            flows[key] = (flows[key] || 0) + value;
+          });
+
+          Object.entries(flows).forEach(([key, value]) => {
+
+            const [from, to] = key.split("->");
+
+            const line = {
+              type: "polyline",
+              paths: [
+                [
+                  getPoint(from),
+                  getPoint(to)
+                ]
+              ]
+            };
+
+            const graphic = new Graphic({
+              geometry: line,
+              symbol: {
+                type: "simple-line",
+                color: [0, 100, 255, 0.6],
+                width: Math.max(1, value / 10)
+              }
+            });
+
+            graphicsLayer.add(graphic);
           });
 
         });
 
-        const rows = Array.from(map.values()).map(d => [
-          d.from,
-          d.to,
-          d.value
-        ]);
+    });
+  </script>
+</head>
 
-        console.log("ROWS:", rows.length);
-
-        const data = new google.visualization.DataTable();
-        data.addColumn('string', 'From');
-        data.addColumn('string', 'To');
-        data.addColumn('number', 'Weight');
-        data.addRows(rows);
-
-        const chart = new google.visualization.Sankey(
-          document.getElementById('sankey')
-        );
-
-        chart.draw(data, {
-          width: 1200,
-          height: 800
-        });
-      }
-    </script>
-  </head>
-
-  <body style="margin:0;">
-    <div id="sankey" style="width:100%; height:800px;"></div>
-  </body>
+<body>
+  <div id="viewDiv"></div>
+</body>
 </html>
