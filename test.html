@@ -1,127 +1,86 @@
 <html>
-<head>
-  <meta charset="utf-8" />
+  <head>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
-  <script src="https://js.arcgis.com/4.29/"></script>
+    <script>
+      google.charts.load('current', { packages: ['sankey'] });
+      google.charts.setOnLoadCallback(drawChart);
 
-  <style>
-    html, body, #viewDiv {
-      height: 100%;
-      width: 100%;
-      margin: 0;
-      padding: 0;
-    }
-  </style>
+      async function drawChart() {
 
-  <script>
-    require([
-      "esri/views/MapView",
-      "esri/WebMap",
-      "esri/layers/FeatureLayer"
-    ], function(MapView, WebMap, FeatureLayer) {
+        const url =
+          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+          "?where=1%3D1" +
+          "&outFields=UNLO_Herkomst,UNLO_Bestemming,Lading" +
+          "&returnGeometry=false" +
+          "&f=json";
 
-      const layerUrl =
-        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2";
+        const response = await fetch(url);
+        const json = await response.json();
 
-      const layer = new FeatureLayer({
-        url: layerUrl
-      });
+        // 🔥 Aggregate flows to avoid duplicates
+        const flowMap = {};
 
-      const webmap = new WebMap({
-        basemap: "gray-vector",
-        layers: [layer]
-      });
-
-      const view = new MapView({
-        container: "viewDiv",
-        map: webmap,
-        center: [5.29, 52.13],
-        zoom: 6
-      });
-
-      layer.queryFeatures({
-        where: "1=1",
-        outFields: ["UNLO_Herkomst", "UNLO_Bestemming", "Goederentype", "Lading"],
-        returnGeometry: false
-      }).then(result => {
-
-        const nodes = new Map();
-        const links = [];
-
-        result.features.forEach(f => {
+        json.features.forEach(f => {
 
           const a = f.attributes;
 
-          const from = a.UNLO_Herkomst;
-          const to = a.UNLO_Bestemming;
-          const type = a.Goederentype;
+          const from = (a.UNLO_Herkomst || "").trim();
+          const to = (a.UNLO_Bestemming || "").trim();
           const value = Number(a.Lading);
 
+          // skip invalid rows
           if (!from || !to || isNaN(value)) return;
 
-          // create nodes (ArcGIS-native graph structure)
-          nodes.set(from, { id: from });
-          nodes.set(to, { id: to });
+          // key ensures aggregation per route
+          const key = from + "->" + to;
 
-          links.push({
-            source: from,
-            target: to,
-            weight: value,
-            type: type
-          });
+          if (!flowMap[key]) {
+            flowMap[key] = {
+              from: from,
+              to: to,
+              value: 0
+            };
+          }
+
+          flowMap[key].value += value;
         });
 
-        console.log("Nodes:", nodes);
-        console.log("Links:", links);
+        // convert to Sankey format
+        const rows = Object.values(flowMap).map(d => [
+          d.from,
+          d.to,
+          d.value
+        ]);
 
-        // For now we visualize structure in console-ready form
-        // Next step = real graph renderer (see below)
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Weight');
+        data.addRows(rows);
 
-        drawSimpleGraph(view, nodes, links);
-
-      });
-
-      function drawSimpleGraph(view, nodes, links) {
-
-        // Minimal visual debug layer using graphics
-
-        const graphics = [];
-
-        links.forEach(l => {
-
-          graphics.push({
-            type: "polyline",
-            paths: [[
-              randomPoint(l.source),
-              randomPoint(l.target)
-            ]],
-            symbol: {
-              type: "simple-line",
-              color: "blue",
-              width: Math.max(1, l.weight / 10)
+        const options = {
+          width: 1200,
+          height: 800,
+          sankey: {
+            node: {
+              label: {
+                fontSize: 12
+              }
             }
-          });
+          }
+        };
 
-        });
+        const chart = new google.visualization.Sankey(
+          document.getElementById('sankey')
+        );
 
-        view.graphics.addMany(graphics);
-
-        function randomPoint(seed) {
-          // deterministic fake positions (replace with real geometry later)
-          const hash = seed.split("").reduce((a,b)=>a+b.charCodeAt(0),0);
-          return [
-            5 + (hash % 100) / 10,
-            52 + (hash % 50) / 10
-          ];
-        }
+        chart.draw(data, options);
       }
+    </script>
+  </head>
 
-    });
-  </script>
-</head>
-
-<body>
-  <div id="viewDiv"></div>
-</body>
+  <body style="margin:0;">
+    <div id="sankey" style="width:100%; height:800px;"></div>
+  </body>
 </html>
