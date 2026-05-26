@@ -20,15 +20,31 @@
 
           var a = feature.attributes;
 
+          // Skip invalid records
+          if (
+            !a.UNLO_Herkomst ||
+            !a.UNLO_Bestemming ||
+            !a.Goederentype ||
+            !a.Lading
+          ) {
+            return;
+          }
+
+          // Create unique middle node to prevent cycles
+          var goederenNode =
+            a.UNLO_Herkomst + " - " + a.Goederentype;
+
+          // Herkomst -> Goederentype
           rows.push([
-            a.UNLO_Herkomst,
-            a.Goederentype,
+            String(a.UNLO_Herkomst),
+            goederenNode,
             Number(a.Lading)
           ]);
 
+          // Goederentype -> Bestemming
           rows.push([
-            a.Goederentype,
-            a.UNLO_Bestemming,
+            goederenNode,
+            String(a.UNLO_Bestemming),
             Number(a.Lading)
           ]);
 
@@ -44,11 +60,18 @@
 
         // Sets chart options.
         var options = {
-          width: 900,
-          height: 600
+          width: 1200,
+          height: 800,
+          sankey: {
+            node: {
+              label: {
+                fontSize: 12
+              }
+            }
+          }
         };
 
-        // Instantiates and draws our chart, passing in some options.
+        // Instantiates and draws our chart.
         var chart = new google.visualization.Sankey(
           document.getElementById('sankey_basic')
         );
@@ -59,6 +82,8 @@
   </head>
 
   <body>
-    <div id="sankey_basic" style="width: 900px; height: 600px;"></div>
+    <div id="sankey_basic"
+         style="width: 1200px; height: 800px;">
+    </div>
   </body>
 </html>
