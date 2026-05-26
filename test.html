@@ -4,21 +4,8 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
 
   <style>
-    body { margin: 0; overflow: hidden; }
-    svg { width: 100vw; height: 100vh; background: #fafafa; }
-
-    line {
-      stroke-opacity: 0.7;
-    }
-
-    circle {
-      fill: #1f77b4;
-    }
-
-    text {
-      font-size: 10px;
-      pointer-events: none;
-    }
+    body { margin: 0; font-family: sans-serif; }
+    svg { width: 100vw; height: 100vh; }
   </style>
 </head>
 
@@ -27,122 +14,126 @@
 
 <script>
 
-const width = window.innerWidth;
-const height = window.innerHeight;
-
-const svg = d3.select("svg");
-const g = svg.append("g");
-
 const url =
   "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
   "?where=1%3D1" +
-  "&outFields=UNLO_Herkomst,UNLO_Bestemming,Goederentype,Lading" +
+  "&outFields=Herkomst_land,Bestemming_Land,Lading" +
   "&returnGeometry=false&f=json";
 
-function clean(v) {
-  return (v || "").toString().trim();
-}
+// -----------------------------
+// CORE NORMALISATION LOGIC
+// -----------------------------
+function normalizeCountry(v) {
+  let c = (v || "").toString().trim().toUpperCase();
 
-// color scale for Goederentype
-const color = d3.scaleOrdinal(d3.schemeTableau10);
+  if (!c) return "UNKNOWN";
+
+  // keep NL as-is
+  if (c === "NL") return "NL";
+
+  // everything else stays its own country code
+  // (BE, DE, FR, etc.)
+  return c;
+}
 
 fetch(url)
   .then(r => r.json())
   .then(data => {
 
     const nodesSet = new Set();
-
-    // key = from|to|type
     const linksMap = new Map();
 
     data.features.forEach(f => {
 
       const a = f.attributes;
 
-      const source = clean(a.UNLO_Herkomst);
-      const target = clean(a.UNLO_Bestemming);
-      const type = clean(a.Goederentype);
-      const value = Number(a.Lading) || 1;
+      let from = normalizeCountry(a.Herkomst_land);
+      let to = normalizeCountry(a.Bestemming_Land);
+      let value = Number(a.Lading) || 1;
 
-      if (!source || !target) return;
+      if (!from || !to) return;
 
-      nodesSet.add(source);
-      nodesSet.add(target);
+      nodesSet.add(from);
+      nodesSet.add(to);
 
-      const key = source + "|" + target + "|" + type;
+      const key = from + "->" + to;
 
       linksMap.set(key, (linksMap.get(key) || 0) + value);
     });
 
-    const nodes = Array.from(nodesSet).map(d => ({ id: d }));
+    const nodes = Array.from(nodesSet);
+    const index = new Map(nodes.map((d, i) => [d, i]));
 
-    const links = Array.from(linksMap.entries()).map(([k, v]) => {
-      const [source, target, type] = k.split("|");
-      return { source, target, type, value: v };
+    const matrix = Array(nodes.length)
+      .fill(0)
+      .map(() => Array(nodes.length).fill(0));
+
+    linksMap.forEach((value, key) => {
+      const [from, to] = key.split("->");
+      matrix[index.get(from)][index.get(to)] = value;
     });
 
-    const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(120))
-      .force("charge", d3.forceManyBody().strength(-250))
-      .force("center", d3.forceCenter(width / 2, height / 2));
+    // -----------------------------
+    // CHORD DIAGRAM (CLEAN VIEW)
+    // -----------------------------
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const outerRadius = Math.min(width, height) * 0.45;
+    const innerRadius = outerRadius - 20;
 
-    const link = g.selectAll("line")
-      .data(links)
-      .enter()
-      .append("line")
-      .attr("stroke", d => color(d.type))
-      .attr("stroke-width", d => Math.max(1, d.value / 5));
+    const svg = d3.select("svg")
+      .attr("viewBox", [-width/2, -height/2, width, height]);
 
-    const node = g.selectAll("circle")
-      .data(nodes)
-      .enter()
-      .append("circle")
-      .attr("r", 6)
-      .call(d3.drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended));
+    const chord = d3.chordDirected()
+      .padAngle(0.03)
+      .sortSubgroups(d3.descending);
 
-    const label = g.selectAll("text")
-      .data(nodes)
-      .enter()
-      .append("text")
-      .text(d => d.id);
+    const arc = d3.arc()
+      .innerRadius(innerRadius)
+      .outerRadius(innerRadius + 12);
 
-    simulation.on("tick", () => {
+    const ribbon = d3.ribbonArrow()
+      .radius(innerRadius);
 
-      link
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
+    const color = d3.scaleOrdinal()
+      .domain(nodes)
+      .range(d3.schemeTableau10);
 
-      node
-        .attr("cx", d => d.x)
-        .attr("cy", d => d.y);
+    const chords = chord(matrix);
 
-      label
-        .attr("x", d => d.x + 8)
-        .attr("y", d => d.y + 3);
+    // GROUPS
+    const group = svg.append("g")
+      .selectAll("g")
+      .data(chords.groups)
+      .join("g");
 
-    });
+    group.append("path")
+      .attr("fill", d => color(nodes[d.index]))
+      .attr("d", arc);
 
-    function dragstarted(event, d) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      d.fx = d.x;
-      d.fy = d.y;
-    }
+    group.append("text")
+      .each(d => d.angle = (d.startAngle + d.endAngle) / 2)
+      .attr("dy", "0.35em")
+      .attr("transform", d =>
+        `rotate(${d.angle * 180 / Math.PI - 90})
+         translate(${innerRadius + 18})
+         ${d.angle > Math.PI ? "rotate(180)" : ""}`
+      )
+      .attr("text-anchor", d => d.angle > Math.PI ? "end" : "start")
+      .text(d => nodes[d.index]);
 
-    function dragged(event, d) {
-      d.fx = event.x;
-      d.fy = event.y;
-    }
-
-    function dragended(event, d) {
-      if (!event.active) simulation.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    }
+    // FLOWS
+    svg.append("g")
+      .attr("fill-opacity", 0.75)
+      .selectAll("path")
+      .data(chords)
+      .join("path")
+      .attr("d", ribbon)
+      .attr("fill", d => color(nodes[d.source.index]))
+      .append("title")
+      .text(d =>
+        `${nodes[d.source.index]} → ${nodes[d.target.index]}`
+      );
 
   });
 
