@@ -1,92 +1,78 @@
 <html>
-  <head>
-    <meta charset="utf-8">
+<head>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-    <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <script>
+    window.google = undefined;
 
-    <script>
-      // 🔥 Prevent stale Google Charts state (important in Experience Builder)
-      window.google = undefined;
+    google.charts.load('current', {
+      packages: ['sankey'],
+      callback: draw
+    });
 
-      google.charts.load('current', {
-        packages: ['sankey'],
-        callback: loadData
+    function parseNumber(v) {
+      if (v === null || v === undefined) return NaN;
+      if (typeof v === "string") v = v.replace(",", ".");
+      return Number(v);
+    }
+
+    async function draw() {
+
+      const url =
+        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+        "?where=1%3D1&outFields=UNLO_Herkomst,UNLO_Bestemming,Lading&returnGeometry=false&f=json";
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      console.log("Features:", json.features.length);
+
+      const map = {};
+
+      json.features.forEach(f => {
+
+        const a = f.attributes;
+
+        const from = (a.UNLO_Herkomst || "").trim();
+        const to = (a.UNLO_Bestemming || "").trim();
+        const value = parseNumber(a.Lading);
+
+        if (!from || !to || isNaN(value)) return;
+
+        const key = from + "->" + to;
+
+        if (!map[key]) map[key] = { from, to, value: 0 };
+
+        map[key].value += value;
       });
 
-      async function loadData() {
+      const rows = Object.values(map).map(d => [
+        d.from,
+        d.to,
+        d.value
+      ]);
 
-        const url =
-          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-          "?where=1%3D1" +
-          "&outFields=UNLO_Herkomst,UNLO_Bestemming,Lading" +
-          "&returnGeometry=false" +
-          "&f=json";
+      console.log("ROWS:", rows.length, rows);
 
-        const response = await fetch(url);
-        const json = await response.json();
+      const data = new google.visualization.DataTable();
+      data.addColumn('string', 'From');
+      data.addColumn('string', 'To');
+      data.addColumn('number', 'Weight');
+      data.addRows(rows);
 
-        // 🔥 Aggregate flows (critical for Sankey stability)
-        const flowMap = {};
+      const chart = new google.visualization.Sankey(
+        document.getElementById('sankey')
+      );
 
-        json.features.forEach(f => {
+      chart.draw(data, {
+        width: 1200,
+        height: 800
+      });
+    }
+  </script>
+</head>
 
-          const a = f.attributes;
-
-          const from = (a.UNLO_Herkomst || "").trim();
-          const to = (a.UNLO_Bestemming || "").trim();
-          const value = Number(a.Lading);
-
-          // skip invalid data
-          if (!from || !to || isNaN(value)) return;
-
-          // 2-level Sankey key
-          const key = from + "->" + to;
-
-          if (!flowMap[key]) {
-            flowMap[key] = {
-              from,
-              to,
-              value: 0
-            };
-          }
-
-          flowMap[key].value += value;
-        });
-
-        const rows = Object.values(flowMap).map(d => [
-          d.from,
-          d.to,
-          d.value
-        ]);
-
-        const data = new google.visualization.DataTable();
-
-        data.addColumn('string', 'From');
-        data.addColumn('string', 'To');
-        data.addColumn('number', 'Weight');
-
-        data.addRows(rows);
-
-        const chart = new google.visualization.Sankey(
-          document.getElementById('sankey')
-        );
-
-        chart.draw(data, {
-          width: 1200,
-          height: 800,
-          sankey: {
-            node: {
-              label: {
-                fontSize: 12
-              }
-            }
-          }
-        });
-      }
-    </script>
-  </head>
-
-  <body style="margin:0;">
-    <div id="sankey" style="width:100%; height:800px;"></div>
-  </body>
+<body>
+  <div id="sankey" style="width:100%; height:800px;"></div>
+</body>
 </html>
