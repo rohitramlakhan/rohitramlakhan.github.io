@@ -1,30 +1,92 @@
-<script>
-  // force clean loader state
-  window.google = undefined;
-</script>
+<html>
+  <head>
+    <meta charset="utf-8">
 
-<script src="https://www.gstatic.com/charts/loader.js?cachebust="></script>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-<script>
-  google.charts.load('current', {
-    packages: ['sankey'],
-    callback: drawChart
-  });
+    <script>
+      // 🔥 Prevent stale Google Charts state (important in Experience Builder)
+      window.google = undefined;
 
-  function drawChart() {
-    const data = new google.visualization.DataTable();
-    data.addColumn('string', 'From');
-    data.addColumn('string', 'To');
-    data.addColumn('number', 'Weight');
+      google.charts.load('current', {
+        packages: ['sankey'],
+        callback: loadData
+      });
 
-    data.addRows([
-      ['A','X',5],
-      ['B','Y',3],
-      ['C','Z',2]
-    ]);
+      async function loadData() {
 
-    new google.visualization.Sankey(
-      document.getElementById('sankey')
-    ).draw(data);
-  }
-</script>
+        const url =
+          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+          "?where=1%3D1" +
+          "&outFields=UNLO_Herkomst,UNLO_Bestemming,Lading" +
+          "&returnGeometry=false" +
+          "&f=json";
+
+        const response = await fetch(url);
+        const json = await response.json();
+
+        // 🔥 Aggregate flows (critical for Sankey stability)
+        const flowMap = {};
+
+        json.features.forEach(f => {
+
+          const a = f.attributes;
+
+          const from = (a.UNLO_Herkomst || "").trim();
+          const to = (a.UNLO_Bestemming || "").trim();
+          const value = Number(a.Lading);
+
+          // skip invalid data
+          if (!from || !to || isNaN(value)) return;
+
+          // 2-level Sankey key
+          const key = from + "->" + to;
+
+          if (!flowMap[key]) {
+            flowMap[key] = {
+              from,
+              to,
+              value: 0
+            };
+          }
+
+          flowMap[key].value += value;
+        });
+
+        const rows = Object.values(flowMap).map(d => [
+          d.from,
+          d.to,
+          d.value
+        ]);
+
+        const data = new google.visualization.DataTable();
+
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Weight');
+
+        data.addRows(rows);
+
+        const chart = new google.visualization.Sankey(
+          document.getElementById('sankey')
+        );
+
+        chart.draw(data, {
+          width: 1200,
+          height: 800,
+          sankey: {
+            node: {
+              label: {
+                fontSize: 12
+              }
+            }
+          }
+        });
+      }
+    </script>
+  </head>
+
+  <body style="margin:0;">
+    <div id="sankey" style="width:100%; height:800px;"></div>
+  </body>
+</html>
