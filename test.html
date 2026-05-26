@@ -1,83 +1,97 @@
 <html>
-<head>
-  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <head>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-  <script>
-    google.charts.load('current', { packages: ['sankey'] });
-    google.charts.setOnLoadCallback(loadData);
+    <script>
+      google.charts.load('current', { packages: ['sankey'] });
 
-    function clean(v) {
-      return (v || "")
-        .toString()
-        .normalize("NFKC")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
+      google.charts.setOnLoadCallback(init);
 
-    async function loadData() {
+      async function init() {
+        // Experience Builder injects the map view in most widget setups
+        // If not, you may need to replace this with this.view / props.view depending on widget type
 
-      const url =
-        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-        "?where=1%3D1" +
-        "&outFields=Herkomst_land,Bestemming_Land" +
-        "&returnGeometry=false" +
-        "&f=json";
+        const view = window._view || window.view || null;
 
-      const response = await fetch(url);
-      const json = await response.json();
+        if (!view || !view.map) {
+          document.getElementById("sankey").innerHTML =
+            "Map view not available in this context.";
+          return;
+        }
 
-      const map = new Map();
+        // 🔥 Get feature layer from web map (no URL)
+        const layer =
+          view.map.allLayers.find(l => l.type === "feature");
 
-      json.features.forEach(f => {
+        if (!layer) {
+          document.getElementById("sankey").innerHTML =
+            "No feature layer found in web map.";
+          return;
+        }
 
-        const a = f.attributes;
+        await view.whenLayerView(layer);
 
-        let from = clean(a.Bestemming_Land);
-        let to = clean(a.Herkomst_land);
+        const fs = await layer.queryFeatures({
+          where: "1=1",
+          outFields: ["Herkomst_land", "Bestemming_Land"],
+          returnGeometry: false
+        });
 
-        // 🚨 HARD SAFETY FILTERS
-        if (!from || !to) return;
-        if (from === to) return; // self-loop kill
+        const map = new Map();
 
-        // deterministic ordering (cycle prevention)
-        const [a1, a2] = from < to ? [from, to] : [to, from];
+        fs.features.forEach(f => {
 
-        const key = a1 + "->" + a2;
+          const a = f.attributes;
 
-        map.set(key, (map.get(key) || 0) + 1);
-      });
+          const from = (a.Herkomst_land || "").toString().trim();
+          const to = (a.Bestemming_Land || "").toString().trim();
 
-      const rows = Array.from(map.entries()).map(([k, v]) => {
-        const [from, to] = k.split("->");
-        return [from, to, v];
-      });
+          if (!from || !to) return;
 
-      console.log("ROWS:", rows.length, rows);
+          const key = from + "->" + to;
 
-      if (rows.length === 0) {
-        document.getElementById("sankey").innerHTML = "No valid data";
-        return;
+          map.set(key, (map.get(key) || 0) + 1);
+        });
+
+        const rows = Array.from(map.entries()).map(([k, v]) => {
+          const [from, to] = k.split("->");
+          return [from, to, v];
+        });
+
+        console.log("Sankey rows:", rows.length);
+
+        if (rows.length === 0) {
+          document.getElementById("sankey").innerHTML =
+            "No valid data found.";
+          return;
+        }
+
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Weight');
+        data.addRows(rows);
+
+        const chart = new google.visualization.Sankey(
+          document.getElementById('sankey')
+        );
+
+        chart.draw(data, {
+          width: 1200,
+          height: 800,
+          sankey: {
+            node: {
+              label: {
+                fontSize: 12
+              }
+            }
+          }
+        });
       }
+    </script>
+  </head>
 
-      const data = new google.visualization.DataTable();
-      data.addColumn('string', 'From');
-      data.addColumn('string', 'To');
-      data.addColumn('number', 'Weight');
-      data.addRows(rows);
-
-      const chart = new google.visualization.Sankey(
-        document.getElementById('sankey')
-      );
-
-      chart.draw(data, {
-        width: 1200,
-        height: 800
-      });
-    }
-  </script>
-</head>
-
-<body style="margin:0;">
-  <div id="sankey" style="width:100%; height:800px;"></div>
-</body>
+  <body style="margin:0;">
+    <div id="sankey" style="width:100%; height:800px;"></div>
+  </body>
 </html>
