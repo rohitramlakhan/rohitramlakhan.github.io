@@ -11,7 +11,7 @@
         const url =
           "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
           "?where=1%3D1" +
-          "&outFields=UNLO_Herkomst,UNLO_Bestemming" +
+          "&outFields=Herkomst_land,Bestemming_Land" +
           "&returnGeometry=false" +
           "&f=json";
 
@@ -24,20 +24,21 @@
 
           const a = f.attributes;
 
-          const from = (a.UNLO_Herkomst || "").trim();
-          const to = (a.UNLO_Bestemming || "").trim();
+          const from = (a.Herkomst_land || "").trim();
+          const to = (a.Bestemming_Land || "").trim();
 
           if (!from || !to) return;
 
-          // fixed weight = 1 (just to visualize structure)
+          // fixed weight so Sankey always renders
           rows.push([from, to, 1]);
         });
+
+        console.log("Rows:", rows.length, rows);
 
         const data = new google.visualization.DataTable();
         data.addColumn('string', 'From');
         data.addColumn('string', 'To');
         data.addColumn('number', 'Weight');
-
         data.addRows(rows);
 
         const chart = new google.visualization.Sankey(
