@@ -1,59 +1,32 @@
 <html>
-  <head>
+  <body>
+    <div id="sankey"></div>
+
     <script src="https://www.gstatic.com/charts/loader.js"></script>
 
     <script>
       google.charts.load('current', { packages: ['sankey'] });
-      google.charts.setOnLoadCallback(loadData);
 
-      async function loadData() {
-
-        const url =
-          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-          "?where=1%3D1" +
-          "&outFields=Herkomst_land,Bestemming_Land" +
-          "&returnGeometry=false" +
-          "&f=json";
-
-        const response = await fetch(url);
-        const json = await response.json();
-
-        const rows = [];
-
-        json.features.forEach(f => {
-
-          const a = f.attributes;
-
-          const from = (a.Herkomst_land || "").trim();
-          const to = (a.Bestemming_Land || "").trim();
-
-          if (!from || !to) return;
-
-          // fixed weight so Sankey always renders
-          rows.push([from, to, 1]);
-        });
-
-        console.log("Rows:", rows.length, rows);
+      google.charts.setOnLoadCallback(() => {
 
         const data = new google.visualization.DataTable();
         data.addColumn('string', 'From');
         data.addColumn('string', 'To');
         data.addColumn('number', 'Weight');
-        data.addRows(rows);
+
+        data.addRows([
+          ['A','X',1],
+          ['B','Y',1],
+          ['C','Z',1]
+        ]);
 
         const chart = new google.visualization.Sankey(
           document.getElementById('sankey')
         );
 
-        chart.draw(data, {
-          width: 1200,
-          height: 800
-        });
-      }
-    </script>
-  </head>
+        chart.draw(data, { width: 600, height: 300 });
 
-  <body>
-    <div id="sankey" style="width:100%; height:800px;"></div>
+      });
+    </script>
   </body>
 </html>
