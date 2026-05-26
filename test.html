@@ -14,28 +14,33 @@
 
         const json = await response.json();
 
-        // IMPORTANT: aggregate to avoid duplicates
         const map = {};
 
         json.features.forEach(f => {
 
           const a = f.attributes;
 
-          if (!a.UNLO_Herkomst || !a.UNLO_Bestemming) return;
+          let from = (a.UNLO_Herkomst || "").trim();
+          let to = (a.UNLO_Bestemming || "").trim();
+          let weight = Number(a.Lading);
 
-          const key = a.UNLO_Herkomst + "->" + a.UNLO_Bestemming;
+          // 🔴 remove invalid rows
+          if (!from || !to || isNaN(weight)) return;
 
-          const value = Number(a.Lading) || 0;
+          // 🔴 remove self-loops (THIS is critical)
+          if (from === to) return;
+
+          // normalise ordering to prevent A→B + B→A cycles
+          const key =
+            from < to
+              ? from + "->" + to
+              : to + "->" + from;
 
           if (!map[key]) {
-            map[key] = {
-              from: a.UNLO_Herkomst,
-              to: a.UNLO_Bestemming,
-              weight: 0
-            };
+            map[key] = { from, to, weight: 0 };
           }
 
-          map[key].weight += value;
+          map[key].weight += weight;
         });
 
         const rows = Object.values(map).map(d => [
