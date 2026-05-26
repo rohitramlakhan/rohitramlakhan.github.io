@@ -3,44 +3,52 @@
     <script src="https://www.gstatic.com/charts/loader.js"></script>
 
     <script>
+      let chartReady = false;
+      let dataReady = false;
+
+      let rows = [
+        ['A','X',5],
+        ['A','Y',7],
+        ['B','X',2],
+        ['B','Z',4]
+      ];
+
       google.charts.load('current', { packages: ['sankey'] });
 
-      // IMPORTANT: wait for full page load (fixes Experience Builder sandbox timing)
-      window.addEventListener("load", function () {
-
-        google.charts.setOnLoadCallback(drawChart);
-
+      google.charts.setOnLoadCallback(() => {
+        chartReady = true;
+        tryDraw();
       });
 
-      function drawChart() {
+      window.addEventListener("load", () => {
+        dataReady = true;
+        tryDraw();
+      });
+
+      function tryDraw() {
+
+        // ONLY draw when BOTH are ready
+        if (!chartReady || !dataReady) return;
 
         const data = new google.visualization.DataTable();
-
         data.addColumn('string', 'From');
         data.addColumn('string', 'To');
         data.addColumn('number', 'Weight');
-
-        data.addRows([
-          ['A', 'X', 5],
-          ['A', 'Y', 7],
-          ['A', 'Z', 6],
-          ['B', 'X', 2],
-          ['B', 'Y', 9],
-          ['B', 'Z', 4]
-        ]);
+        data.addRows(rows);
 
         const chart = new google.visualization.Sankey(
-          document.getElementById('sankey_basic')
+          document.getElementById('sankey')
         );
 
         chart.draw(data, {
-          width: 600
+          width: 800,
+          height: 400
         });
       }
     </script>
   </head>
 
   <body>
-    <div id="sankey_basic" style="width:900px;height:300px;"></div>
+    <div id="sankey" style="width:800px;height:400px;"></div>
   </body>
 </html>
