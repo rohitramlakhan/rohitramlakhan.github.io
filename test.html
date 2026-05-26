@@ -1,76 +1,83 @@
 <html>
-  <head>
-    <script src="https://www.gstatic.com/charts/loader.js"></script>
+<head>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
 
-    <script>
-      google.charts.load('current', { packages: ['sankey'] });
-      google.charts.setOnLoadCallback(loadData);
+  <script>
+    google.charts.load('current', { packages: ['sankey'] });
+    google.charts.setOnLoadCallback(loadData);
 
-      async function loadData() {
+    function clean(v) {
+      return (v || "")
+        .toString()
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
 
-        const url =
-          "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-          "?where=1%3D1" +
-          "&outFields=Herkomst_land,Bestemming_Land" +
-          "&returnGeometry=false" +
-          "&f=json";
+    async function loadData() {
 
-        const response = await fetch(url);
-        const json = await response.json();
+      const url =
+        "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+        "?where=1%3D1" +
+        "&outFields=Herkomst_land,Bestemming_Land" +
+        "&returnGeometry=false" +
+        "&f=json";
 
-        const map = new Map();
+      const response = await fetch(url);
+      const json = await response.json();
 
-        json.features.forEach(f => {
+      const map = new Map();
 
-          const a = f.attributes;
+      json.features.forEach(f => {
 
-          let from = (a.Herkomst_land || "").trim();
-          let to = (a.Bestemming_Land || "").trim();
+        const a = f.attributes;
 
-          if (!from || !to) return;
+        let from = clean(a.Herkomst_land);
+        let to = clean(a.Bestemming_Land);
 
-          // 🔴 FIX 1: enforce stable direction (prevents A↔B cycles)
-          const key =
-            from < to
-              ? from + "->" + to
-              : to + "->" + from;
+        // 🚨 HARD SAFETY FILTERS
+        if (!from || !to) return;
+        if (from === to) return; // self-loop kill
 
-          // 🔴 FIX 2: ensure no duplicates
-          map.set(key, {
-            from: key.split("->")[0],
-            to: key.split("->")[1],
-            value: (map.get(key)?.value || 0) + 1
-          });
+        // deterministic ordering (cycle prevention)
+        const [a1, a2] = from < to ? [from, to] : [to, from];
 
-        });
+        const key = a1 + "->" + a2;
 
-        const rows = Array.from(map.values()).map(d => [
-          d.from,
-          d.to,
-          d.value
-        ]);
+        map.set(key, (map.get(key) || 0) + 1);
+      });
 
-        console.log("ROWS:", rows.length);
+      const rows = Array.from(map.entries()).map(([k, v]) => {
+        const [from, to] = k.split("->");
+        return [from, to, v];
+      });
 
-        const data = new google.visualization.DataTable();
-        data.addColumn('string', 'From');
-        data.addColumn('string', 'To');
-        data.addColumn('number', 'Weight');
-        data.addRows(rows);
+      console.log("ROWS:", rows.length, rows);
 
-        const chart = new google.visualization.Sankey(
-          document.getElementById('sankey')
-        );
-
-        chart.draw(data, {
-          width: 1200,
-          height: 800
-        });
+      if (rows.length === 0) {
+        document.getElementById("sankey").innerHTML = "No valid data";
+        return;
       }
-    </script>
-  </head>
 
-  <body style="margin:0;">
-    <div id="sankey" style="width:100%; height:800px;"></div>
-  </body>
+      const data = new google.visualization.DataTable();
+      data.addColumn('string', 'From');
+      data.addColumn('string', 'To');
+      data.addColumn('number', 'Weight');
+      data.addRows(rows);
+
+      const chart = new google.visualization.Sankey(
+        document.getElementById('sankey')
+      );
+
+      chart.draw(data, {
+        width: 1200,
+        height: 800
+      });
+    }
+  </script>
+</head>
+
+<body style="margin:0;">
+  <div id="sankey" style="width:100%; height:800px;"></div>
+</body>
 </html>
