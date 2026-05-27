@@ -25,10 +25,10 @@
   <script type="text/javascript">
 
     google.charts.load('current', {
-      packages:['sankey']
+      packages: ['sankey']
     });
 
-    google.charts.setOnLoadCallback(loadArcGISData);
+    google.charts.setOnLoadCallback(init);
 
     // -----------------------------------
     // FEATURE SERVICE
@@ -58,13 +58,22 @@
     }
 
     // -----------------------------------
+    // INIT (IMPORTANT FOR EXB IFRAME)
+    // -----------------------------------
+    function init() {
+
+      setTimeout(loadArcGISData, 600);
+
+    }
+
+    // -----------------------------------
     // LOAD DATA
     // -----------------------------------
     async function loadArcGISData() {
 
       try {
 
-        const response = await fetch(url);
+        const response = await fetch(url, { mode: "cors" });
         const json = await response.json();
 
         const outbound = new Map();
@@ -96,12 +105,10 @@
 
           const inVal = inbound.get(country) || 0;
 
-          const label =
-            `NL → ${country}: ${outVal.toLocaleString()} ton | ${country}\n→ NL: ${inVal.toLocaleString()} ton`;
-
+          // ONLY COUNTRY LABELS (no IN/OUT text)
           rows.push([
-            "Lading",
-            label,
+            "NL",
+            country,
             outVal
           ]);
 
@@ -111,7 +118,7 @@
 
       }
       catch (err) {
-        console.error(err);
+        console.error("Data load error:", err);
       }
     }
 
@@ -119,6 +126,8 @@
     // DRAW SANKEY
     // -----------------------------------
     function drawChart(rows) {
+
+      const container = document.getElementById("sankey_basic");
 
       const data = new google.visualization.DataTable();
 
@@ -128,21 +137,14 @@
 
       data.addRows(rows);
 
-      const colors = [
-        '#3366CC',
-        '#DC3912',
-        '#FF9900',
-        '#109618',
-        '#990099',
-        '#0099C6',
-        '#DD4477',
-        '#66AA00'
-      ];
+      // SAFE sizing for Experience Builder iframe
+      const width = container.clientWidth;
+      const height = container.clientHeight;
 
       const options = {
 
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width: width,
+        height: height,
 
         sankey: {
 
@@ -156,25 +158,14 @@
           },
 
           link: {
-            colorMode: 'target',
-            colors: colors
+            colorMode: 'source'
           }
         }
       };
 
-      const chart = new google.visualization.Sankey(
-        document.getElementById('sankey_basic')
-      );
-
+      const chart = new google.visualization.Sankey(container);
       chart.draw(data, options);
     }
-
-    // -----------------------------------
-    // RESIZE
-    // -----------------------------------
-    window.addEventListener("resize", () => {
-      loadArcGISData();
-    });
 
   </script>
 </head>
