@@ -25,10 +25,14 @@
   <script type="text/javascript">
 
     google.charts.load('current', {
-      packages: ['sankey']
+      packages:['sankey']
     });
 
     google.charts.setOnLoadCallback(init);
+
+    function init() {
+      setTimeout(loadArcGISData, 600);
+    }
 
     // -----------------------------------
     // FEATURE SERVICE
@@ -58,22 +62,13 @@
     }
 
     // -----------------------------------
-    // INIT (IMPORTANT FOR EXB IFRAME)
-    // -----------------------------------
-    function init() {
-
-      setTimeout(loadArcGISData, 600);
-
-    }
-
-    // -----------------------------------
     // LOAD DATA
     // -----------------------------------
     async function loadArcGISData() {
 
       try {
 
-        const response = await fetch(url, { mode: "cors" });
+        const response = await fetch(url);
         const json = await response.json();
 
         const outbound = new Map();
@@ -105,10 +100,12 @@
 
           const inVal = inbound.get(country) || 0;
 
-          // ONLY COUNTRY LABELS (no IN/OUT text)
+          const label =
+            `NL → ${country}: ${outVal.toLocaleString()} ton | ${country}\n→ NL: ${inVal.toLocaleString()} ton`;
+
           rows.push([
-            "NL",
-            country,
+            "Lading",
+            label,
             outVal
           ]);
 
@@ -118,7 +115,7 @@
 
       }
       catch (err) {
-        console.error("Data load error:", err);
+        console.error(err);
       }
     }
 
@@ -127,7 +124,8 @@
     // -----------------------------------
     function drawChart(rows) {
 
-      const container = document.getElementById("sankey_basic");
+      const container =
+        document.getElementById('sankey_basic');
 
       const data = new google.visualization.DataTable();
 
@@ -137,9 +135,20 @@
 
       data.addRows(rows);
 
-      // SAFE sizing for Experience Builder iframe
+      // ✔ FIXED: iframe-safe sizing
       const width = container.clientWidth;
       const height = container.clientHeight;
+
+      const colors = [
+        '#3366CC',
+        '#DC3912',
+        '#FF9900',
+        '#109618',
+        '#990099',
+        '#0099C6',
+        '#DD4477',
+        '#66AA00'
+      ];
 
       const options = {
 
@@ -158,7 +167,8 @@
           },
 
           link: {
-            colorMode: 'source'
+            colorMode: 'target',
+            colors: colors
           }
         }
       };
