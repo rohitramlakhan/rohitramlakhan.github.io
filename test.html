@@ -2,8 +2,9 @@
 <head>
   <meta charset="utf-8" />
 
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+  <script type="text/javascript"
+    src="https://www.gstatic.com/charts/loader.js">
+  </script>
 
   <style>
     html, body {
@@ -12,203 +13,173 @@
       height: 100%;
       overflow: hidden;
       font-family: sans-serif;
+      background: white;
     }
 
-    svg {
+    #sankey_basic {
       width: 100%;
       height: 100%;
-      display: block;
-    }
-
-    .node rect {
-      cursor: move;
-      fill-opacity: 0.9;
-      shape-rendering: crispEdges;
-    }
-
-    .node text {
-      pointer-events: none;
-      font-size: 12px;
-    }
-
-    .link {
-      fill: none;
-      stroke-opacity: 0.4;
-    }
-
-    .link:hover {
-      stroke-opacity: 0.7;
     }
   </style>
+
+  <script type="text/javascript">
+
+    google.charts.load('current', {
+      packages:['sankey']
+    });
+
+    google.charts.setOnLoadCallback(loadArcGISData);
+
+    // -----------------------------------
+    // FEATURE SERVICE
+    // -----------------------------------
+    const url =
+      "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+      "?where=1%3D1" +
+      "&outFields=Herkomst_land,Bestemming_Land,Lading" +
+      "&returnGeometry=false" +
+      "&f=json";
+
+    // -----------------------------------
+    // COUNTRY GROUPING
+    // -----------------------------------
+    function normalizeCountry(v) {
+
+      let c = (v || "")
+        .toString()
+        .trim()
+        .toUpperCase();
+
+      if (!c) return "OTHER";
+
+      const allowed = ["NL", "BE", "DE", "FR"];
+
+      return allowed.includes(c) ? c : "OTHER";
+    }
+
+    // -----------------------------------
+    // LOAD DATA
+    // -----------------------------------
+    async function loadArcGISData() {
+
+      try {
+
+        const response = await fetch(url);
+        const json = await response.json();
+
+        const outbound = new Map();
+        const inbound = new Map();
+
+        json.features.forEach(f => {
+
+          const a = f.attributes;
+
+          let from = normalizeCountry(a.Herkomst_land);
+          let to   = normalizeCountry(a.Bestemming_Land);
+          let val  = Number(a.Lading) || 1;
+
+          // NL → others
+          if (from === "NL" && to !== "NL") {
+            outbound.set(to, (outbound.get(to) || 0) + val);
+          }
+
+          // others → NL
+          if (to === "NL" && from !== "NL") {
+            inbound.set(from, (inbound.get(from) || 0) + val);
+          }
+
+        });
+
+        const rows = [];
+
+        outbound.forEach((outVal, country) => {
+
+          const inVal = inbound.get(country) || 0;
+
+          const label =
+            `NL → ${country}: ${outVal.toLocaleString()} ton | ${country}\n→ NL: ${inVal.toLocaleString()} ton`;
+
+          rows.push([
+            "Lading",
+            label,
+            outVal
+          ]);
+
+        });
+
+        drawChart(rows);
+
+      }
+      catch (err) {
+        console.error(err);
+      }
+    }
+
+    // -----------------------------------
+    // DRAW SANKEY
+    // -----------------------------------
+    function drawChart(rows) {
+
+      const data = new google.visualization.DataTable();
+
+      data.addColumn('string', 'From');
+      data.addColumn('string', 'To');
+      data.addColumn('number', 'Weight');
+
+      data.addRows(rows);
+
+      const colors = [
+        '#3366CC',
+        '#DC3912',
+        '#FF9900',
+        '#109618',
+        '#990099',
+        '#0099C6',
+        '#DD4477',
+        '#66AA00'
+      ];
+
+      const options = {
+
+        width: window.innerWidth,
+        height: window.innerHeight,
+
+        sankey: {
+
+          node: {
+            width: 20,
+            nodePadding: 40,
+            label: {
+              fontSize: 14,
+              color: '#000'
+            }
+          },
+
+          link: {
+            colorMode: 'target',
+            colors: colors
+          }
+        }
+      };
+
+      const chart = new google.visualization.Sankey(
+        document.getElementById('sankey_basic')
+      );
+
+      chart.draw(data, options);
+    }
+
+    // -----------------------------------
+    // RESIZE
+    // -----------------------------------
+    window.addEventListener("resize", () => {
+      loadArcGISData();
+    });
+
+  </script>
 </head>
 
 <body>
-
-<svg></svg>
-
-<script>
-
-const url =
-  "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
-  "?where=1%3D1" +
-  "&outFields=Herkomst_land,Bestemming_Land,Lading" +
-  "&returnGeometry=false&f=json";
-
-// -----------------------------
-// CORE NORMALISATION LOGIC
-// -----------------------------
-function normalizeCountry(v) {
-
-  let c = (v || "").toString().trim().toUpperCase();
-
-  if (!c) return "UNKNOWN";
-
-  // keep NL as-is
-  if (c === "NL") return "NL";
-
-  // everything else stays its own country code
-  return c;
-}
-
-fetch(url)
-  .then(r => r.json())
-  .then(data => {
-
-    const nodesSet = new Set();
-    const linksMap = new Map();
-
-    data.features.forEach(f => {
-
-      const a = f.attributes;
-
-      let from = normalizeCountry(a.Herkomst_land);
-      let to = normalizeCountry(a.Bestemming_Land);
-      let value = Number(a.Lading) || 1;
-
-      if (!from || !to) return;
-
-      nodesSet.add(from);
-      nodesSet.add(to);
-
-      const key = from + "->" + to;
-
-      linksMap.set(key, (linksMap.get(key) || 0) + value);
-    });
-
-    // -----------------------------
-    // BUILD NODES + LINKS
-    // -----------------------------
-    const nodes = Array.from(nodesSet).map(d => ({
-      name: d
-    }));
-
-    const nodeIndex = new Map(
-      nodes.map((d, i) => [d.name, i])
-    );
-
-    const links = [];
-
-    linksMap.forEach((value, key) => {
-
-      const [from, to] = key.split("->");
-
-      links.push({
-        source: nodeIndex.get(from),
-        target: nodeIndex.get(to),
-        value: value
-      });
-    });
-
-    // -----------------------------
-    // SVG
-    // -----------------------------
-    const width = document.body.clientWidth;
-    const height = document.body.clientHeight;
-
-    const svg = d3.select("svg")
-      .attr("viewBox", [0, 0, width, height]);
-
-    // -----------------------------
-    // COLORS
-    // -----------------------------
-    const color = d3.scaleOrdinal()
-      .domain(nodes.map(d => d.name))
-      .range(d3.quantize(d3.interpolateRainbow, nodes.length));
-
-    // -----------------------------
-    // SANKEY LAYOUT
-    // -----------------------------
-    const sankey = d3.sankey()
-      .nodeWidth(20)
-      .nodePadding(20)
-      .extent([[20, 20], [width - 20, height - 20]]);
-
-    const graph = sankey({
-      nodes: nodes.map(d => Object.assign({}, d)),
-      links: links.map(d => Object.assign({}, d))
-    });
-
-    // -----------------------------
-    // LINKS
-    // -----------------------------
-    svg.append("g")
-      .selectAll("path")
-      .data(graph.links)
-      .join("path")
-      .attr("class", "link")
-      .attr("d", d3.sankeyLinkHorizontal())
-      .attr("stroke", d => color(graph.nodes[d.source.index].name))
-      .attr("stroke-width", d => Math.max(1, d.width))
-      .append("title")
-      .text(d =>
-        `${d.source.name} → ${d.target.name}
-Value: ${d.value.toLocaleString()}`
-      );
-
-    // -----------------------------
-    // NODES
-    // -----------------------------
-    const node = svg.append("g")
-      .selectAll("g")
-      .data(graph.nodes)
-      .join("g")
-      .attr("class", "node");
-
-    node.append("rect")
-      .attr("x", d => d.x0)
-      .attr("y", d => d.y0)
-      .attr("height", d => d.y1 - d.y0)
-      .attr("width", d => d.x1 - d.x0)
-      .attr("fill", d => color(d.name))
-      .append("title")
-      .text(d =>
-        `${d.name}
-Total: ${d.value.toLocaleString()}`
-      );
-
-    // -----------------------------
-    // LABELS
-    // -----------------------------
-    node.append("text")
-      .attr("x", d => d.x0 - 6)
-      .attr("y", d => (d.y1 + d.y0) / 2)
-      .attr("dy", "0.35em")
-      .attr("text-anchor", "end")
-      .text(d => d.name)
-      .filter(d => d.x0 < width / 2)
-      .attr("x", d => d.x1 + 6)
-      .attr("text-anchor", "start");
-
-  });
-
-// -----------------------------
-// SIMPLE RESIZE SUPPORT
-// -----------------------------
-window.addEventListener("resize", () => {
-  location.reload();
-});
-
-</script>
-
+  <div id="sankey_basic"></div>
 </body>
 </html>
