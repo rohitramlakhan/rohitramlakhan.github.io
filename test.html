@@ -120,15 +120,14 @@
     }
 
     // -----------------------------------
-    // DRAW SANKEY + CLICK FILTER
+    // DRAW SANKEY
     // -----------------------------------
     function drawChart(rows) {
 
       const container =
         document.getElementById('sankey_basic');
 
-      const data =
-        new google.visualization.DataTable();
+      const data = new google.visualization.DataTable();
 
       data.addColumn('string', 'From');
       data.addColumn('string', 'To');
@@ -136,6 +135,7 @@
 
       data.addRows(rows);
 
+      // ✔ FIXED: iframe-safe sizing
       const width = container.clientWidth;
       const height = container.clientHeight;
 
@@ -173,51 +173,8 @@
         }
       };
 
-      const chart =
-        new google.visualization.Sankey(container);
-
+      const chart = new google.visualization.Sankey(container);
       chart.draw(data, options);
-
-      // -----------------------------------
-      // CLICK → UPDATE EXPERIENCE BUILDER URL
-      // -----------------------------------
-      google.visualization.events.addListener(chart, 'select', function () {
-
-        const sel = chart.getSelection();
-        if (!sel.length) return;
-
-        const row = sel[0].row;
-        if (row == null) return;
-
-        const label = data.getValue(row, 1);
-
-        const match = label.match(/NL → ([A-Z]+)/);
-        if (!match) return;
-
-        const country = match[1];
-
-        console.log("Clicked country:", country);
-
-        try {
-
-          const parentUrl =
-            new URL(window.parent.location.href);
-
-          parentUrl.searchParams.set(
-            "country",
-            country
-          );
-
-          window.parent.location.href =
-            parentUrl.toString();
-
-        }
-        catch (e) {
-          console.log("URL update failed:", e);
-        }
-
-      });
-
     }
 
   </script>
