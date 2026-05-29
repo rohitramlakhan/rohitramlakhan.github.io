@@ -2,35 +2,24 @@
 <head>
   <meta charset="utf-8" />
 
-  <script
-    type="text/javascript"
+  <script type="text/javascript"
     src="https://www.gstatic.com/charts/loader.js">
   </script>
 
   <style>
-
     html, body {
-
       margin: 0;
-      padding: 0;
-
       width: 100%;
       height: 100%;
-
       overflow: hidden;
-
       font-family: sans-serif;
       background: white;
-
     }
 
     #sankey_basic {
-
-      width: 1200px;
-      height: 800px;
-
+      width: 100%;
+      height: 100%;
     }
-
   </style>
 
   <script type="text/javascript">
@@ -39,13 +28,17 @@
       packages:['sankey']
     });
 
-    google.charts.setOnLoadCallback(loadArcGISData);
+    google.charts.setOnLoadCallback(init);
+
+    function init() {
+      setTimeout(loadArcGISData, 600);
+    }
 
     // -----------------------------------
     // FEATURE SERVICE
     // -----------------------------------
     const url =
-      "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/2/query" +
+      "https://services-eu1.arcgis.com/4D1GBrbE6xp1T4YG/arcgis/rest/services/Visie_vaarwegen/FeatureServer/3/query" +
       "?where=1%3D1" +
       "&outFields=Herkomst_land,Bestemming_Land,Lading" +
       "&returnGeometry=false" +
@@ -63,17 +56,9 @@
 
       if (!c) return "OTHER";
 
-      const allowed = [
-        "NL",
-        "BE",
-        "DE",
-        "FR"
-      ];
+      const allowed = ["NL", "BE", "DE", "FR"];
 
-      return allowed.includes(c)
-        ? c
-        : "OTHER";
-
+      return allowed.includes(c) ? c : "OTHER";
     }
 
     // -----------------------------------
@@ -83,73 +68,37 @@
 
       try {
 
-        const response =
-          await fetch(url);
+        const response = await fetch(url);
+        const json = await response.json();
 
-        const json =
-          await response.json();
-
-        const outbound =
-          new Map();
-
-        const inbound =
-          new Map();
+        const outbound = new Map();
+        const inbound = new Map();
 
         json.features.forEach(f => {
 
-          const a =
-            f.attributes;
+          const a = f.attributes;
 
-          let from =
-            normalizeCountry(
-              a.Herkomst_land
-            );
+          let from = normalizeCountry(a.Herkomst_land);
+          let to   = normalizeCountry(a.Bestemming_Land);
+          let val  = Number(a.Lading) || 1;
 
-          let to =
-            normalizeCountry(
-              a.Bestemming_Land
-            );
-
-          let val =
-            Number(a.Lading) || 1;
-
-          // NL -> others
-          if (
-            from === "NL" &&
-            to !== "NL"
-          ) {
-
-            outbound.set(
-              to,
-              (outbound.get(to) || 0) + val
-            );
-
+          // NL → others
+          if (from === "NL" && to !== "NL") {
+            outbound.set(to, (outbound.get(to) || 0) + val);
           }
 
-          // others -> NL
-          if (
-            to === "NL" &&
-            from !== "NL"
-          ) {
-
-            inbound.set(
-              from,
-              (inbound.get(from) || 0) + val
-            );
-
+          // others → NL
+          if (to === "NL" && from !== "NL") {
+            inbound.set(from, (inbound.get(from) || 0) + val);
           }
 
         });
 
         const rows = [];
 
-        outbound.forEach((
-          outVal,
-          country
-        ) => {
+        outbound.forEach((outVal, country) => {
 
-          const inVal =
-            inbound.get(country) || 0;
+          const inVal = inbound.get(country) || 0;
 
           const label =
             `NL → ${country}: ${outVal.toLocaleString()} ton | ${country}\n→ NL: ${inVal.toLocaleString()} ton`;
@@ -165,116 +114,73 @@
         drawChart(rows);
 
       }
-      catch(err) {
-
+      catch (err) {
         console.error(err);
-
-        document.body.innerHTML =
-          "<h2>Data load failed</h2>";
-
       }
-
     }
 
     // -----------------------------------
-    // DRAW CHART
+    // DRAW SANKEY
     // -----------------------------------
     function drawChart(rows) {
 
-      try {
+      const container =
+        document.getElementById('sankey_basic');
 
-        const data =
-          new google.visualization.DataTable();
+      const data = new google.visualization.DataTable();
 
-        data.addColumn(
-          'string',
-          'From'
-        );
+      data.addColumn('string', 'From');
+      data.addColumn('string', 'To');
+      data.addColumn('number', 'Weight');
 
-        data.addColumn(
-          'string',
-          'To'
-        );
+      data.addRows(rows);
 
-        data.addColumn(
-          'number',
-          'Weight'
-        );
+      // ✔ FIXED: iframe-safe sizing
+      const width = container.clientWidth;
+      const height = container.clientHeight;
 
-        data.addRows(rows);
+      const colors = [
+        '#3366CC',
+        '#DC3912',
+        '#FF9900',
+        '#109618',
+        '#990099',
+        '#0099C6',
+        '#DD4477',
+        '#66AA00'
+      ];
 
-        const colors = [
-          '#3366CC',
-          '#DC3912',
-          '#FF9900',
-          '#109618',
-          '#990099',
-          '#0099C6',
-          '#DD4477',
-          '#66AA00'
-        ];
+      const options = {
 
-        const options = {
+        width: width,
+        height: height,
 
-          width: 1200,
-          height: 800,
+        sankey: {
 
-          sankey: {
-
-            node: {
-
-              width: 20,
-
-              nodePadding: 40,
-
-              label: {
-
-                fontSize: 14,
-                color: '#000'
-
-              }
-            },
-
-            link: {
-
-              colorMode: 'target',
-
-              colors: colors
-
+          node: {
+            width: 20,
+            nodePadding: 40,
+            label: {
+              fontSize: 14,
+              color: '#000'
             }
+          },
+
+          link: {
+            colorMode: 'target',
+            colors: colors
           }
-        };
+        }
+      };
 
-        const chart =
-          new google.visualization.Sankey(
-            document.getElementById(
-              'sankey_basic'
-            )
-          );
-
-        chart.draw(
-          data,
-          options
-        );
-
-      }
-      catch(err) {
-
-        console.error(err);
-
-        document.body.innerHTML =
-          "<h2>Chart draw failed</h2>";
-
-      }
-
+      const chart = new google.visualization.Sankey(container);
+      chart.draw(data, options);
     }
 
   </script>
 </head>
 
 <body>
-
   <div id="sankey_basic"></div>
-
 </body>
 </html>
