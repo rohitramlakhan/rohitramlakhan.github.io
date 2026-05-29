@@ -19,6 +19,7 @@
     #sankey_basic {
       width: 100%;
       height: 100%;
+      min-height: 600px;
     }
   </style>
 
@@ -28,15 +29,32 @@
       packages:['sankey']
     });
 
-    google.charts.setOnLoadCallback(init);
+    google.charts.setOnLoadCallback(waitForContainer);
 
     // -----------------------------------
-    // INIT
+    // WAIT UNTIL CONTAINER HAS SIZE
     // -----------------------------------
-    function init() {
+    function waitForContainer() {
 
-      // Experience Builder iframe can load slowly
-      setTimeout(loadArcGISData, 1500);
+      const container =
+        document.getElementById('sankey_basic');
+
+      const check = setInterval(() => {
+
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+
+        console.log("Checking size:", w, h);
+
+        if (w > 0 && h > 0) {
+
+          clearInterval(check);
+
+          loadArcGISData();
+
+        }
+
+      }, 300);
 
     }
 
@@ -74,11 +92,13 @@
 
       try {
 
+        console.log("Loading ArcGIS data...");
+
         const response = await fetch(url);
 
         const json = await response.json();
 
-        console.log("Features loaded:", json.features.length);
+        console.log("Features:", json.features.length);
 
         const outbound = new Map();
         const inbound = new Map();
@@ -144,82 +164,73 @@
     }
 
     // -----------------------------------
-    // DRAW SANKEY
+    // DRAW CHART
     // -----------------------------------
     function drawChart(rows) {
 
-      const container =
-        document.getElementById('sankey_basic');
+      try {
 
-      // fallback dimensions
-      const width =
-        container.clientWidth || 800;
+        const container =
+          document.getElementById('sankey_basic');
 
-      const height =
-        container.clientHeight || 600;
+        const width =
+          container.clientWidth;
 
-      console.log("Container size:", width, height);
+        const height =
+          container.clientHeight;
 
-      // prevent empty chart rendering
-      if (!rows.length) {
+        console.log("Drawing chart:", width, height);
 
-        console.log("No rows to display");
+        const data =
+          new google.visualization.DataTable();
 
-        return;
-      }
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Weight');
 
-      const data =
-        new google.visualization.DataTable();
+        data.addRows(rows);
 
-      data.addColumn('string', 'From');
-      data.addColumn('string', 'To');
-      data.addColumn('number', 'Weight');
+        const colors = [
+          '#3366CC',
+          '#DC3912',
+          '#FF9900',
+          '#109618',
+          '#990099',
+          '#0099C6',
+          '#DD4477',
+          '#66AA00'
+        ];
 
-      data.addRows(rows);
+        const options = {
 
-      const colors = [
-        '#3366CC',
-        '#DC3912',
-        '#FF9900',
-        '#109618',
-        '#990099',
-        '#0099C6',
-        '#DD4477',
-        '#66AA00'
-      ];
+          width: width,
+          height: height,
 
-      const options = {
+          sankey: {
 
-        width: width,
-        height: height,
+            node: {
 
-        sankey: {
+              width: 20,
 
-          node: {
+              nodePadding: 40,
 
-            width: 20,
+              label: {
 
-            nodePadding: 40,
+                fontSize: 14,
+                color: '#000'
 
-            label: {
+              }
+            },
 
-              fontSize: 14,
-              color: '#000'
+            link: {
+
+              colorMode: 'target',
+
+              colors: colors
 
             }
-          },
-
-          link: {
-
-            colorMode: 'target',
-
-            colors: colors
-
           }
-        }
-      };
-
-      try {
+        };
 
         const chart =
           new google.visualization.Sankey(
@@ -227,6 +238,8 @@
           );
 
         chart.draw(data, options);
+
+        console.log("Chart drawn");
 
       }
       catch(err) {
