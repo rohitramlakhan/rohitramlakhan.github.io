@@ -44,9 +44,6 @@
       "&returnGeometry=false" +
       "&f=json";
 
-    // -----------------------------------
-    // COUNTRY GROUPING
-    // -----------------------------------
     function normalizeCountry(v) {
 
       let c = (v || "")
@@ -61,9 +58,6 @@
       return allowed.includes(c) ? c : "OTHER";
     }
 
-    // -----------------------------------
-    // LOAD DATA
-    // -----------------------------------
     async function loadArcGISData() {
 
       try {
@@ -82,12 +76,10 @@
           let to   = normalizeCountry(a.Bestemming_Land);
           let val  = Number(a.Lading) || 1;
 
-          // NL → others
           if (from === "NL" && to !== "NL") {
             outbound.set(to, (outbound.get(to) || 0) + val);
           }
 
-          // others → NL
           if (to === "NL" && from !== "NL") {
             inbound.set(from, (inbound.get(from) || 0) + val);
           }
@@ -120,7 +112,7 @@
     }
 
     // -----------------------------------
-    // DRAW SANKEY
+    // DRAW SANKEY + CLICK EVENT
     // -----------------------------------
     function drawChart(rows) {
 
@@ -135,7 +127,6 @@
 
       data.addRows(rows);
 
-      // ✔ FIXED: iframe-safe sizing
       const width = container.clientWidth;
       const height = container.clientHeight;
 
@@ -173,8 +164,48 @@
         }
       };
 
-      const chart = new google.visualization.Sankey(container);
+      const chart =
+        new google.visualization.Sankey(container);
+
       chart.draw(data, options);
+
+      // -----------------------------------
+      // CLICK EVENT → SEND TO EXPERIENCE BUILDER
+      // -----------------------------------
+      google.visualization.events.addListener(chart, 'select', function () {
+
+        const sel = chart.getSelection();
+        if (!sel.length) return;
+
+        const row = sel[0].row;
+        if (row == null) return;
+
+        const label = data.getValue(row, 1);
+
+        // extract country
+        const match = label.match(/NL → ([A-Z]+)/);
+        if (!match) return;
+
+        const country = match[1];
+
+        console.log("Clicked country:", country);
+
+        // 1. Send message to Experience Builder
+        window.parent.postMessage({
+          type: "filter-country",
+          country: country
+        }, "*");
+
+        // 2. Optional URL sync (backup)
+        try {
+          const url = new URL(window.parent.location);
+          url.searchParams.set("country", country);
+          window.parent.history.replaceState({}, "", url);
+        }
+        catch(e) {}
+
+      });
+
     }
 
   </script>
