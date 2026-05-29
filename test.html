@@ -30,8 +30,14 @@
 
     google.charts.setOnLoadCallback(init);
 
+    // -----------------------------------
+    // INIT
+    // -----------------------------------
     function init() {
-      setTimeout(loadArcGISData, 600);
+
+      // Experience Builder iframe can load slowly
+      setTimeout(loadArcGISData, 1500);
+
     }
 
     // -----------------------------------
@@ -69,7 +75,10 @@
       try {
 
         const response = await fetch(url);
+
         const json = await response.json();
+
+        console.log("Features loaded:", json.features.length);
 
         const outbound = new Map();
         const inbound = new Map();
@@ -84,12 +93,22 @@
 
           // NL → others
           if (from === "NL" && to !== "NL") {
-            outbound.set(to, (outbound.get(to) || 0) + val);
+
+            outbound.set(
+              to,
+              (outbound.get(to) || 0) + val
+            );
+
           }
 
           // others → NL
           if (to === "NL" && from !== "NL") {
-            inbound.set(from, (inbound.get(from) || 0) + val);
+
+            inbound.set(
+              from,
+              (inbound.get(from) || 0) + val
+            );
+
           }
 
         });
@@ -98,7 +117,8 @@
 
         outbound.forEach((outVal, country) => {
 
-          const inVal = inbound.get(country) || 0;
+          const inVal =
+            inbound.get(country) || 0;
 
           const label =
             `NL → ${country}: ${outVal.toLocaleString()} ton | ${country}\n→ NL: ${inVal.toLocaleString()} ton`;
@@ -111,11 +131,15 @@
 
         });
 
+        console.log("Rows:", rows);
+
         drawChart(rows);
 
       }
       catch (err) {
-        console.error(err);
+
+        console.error("Data load error:", err);
+
       }
     }
 
@@ -127,17 +151,31 @@
       const container =
         document.getElementById('sankey_basic');
 
-      const data = new google.visualization.DataTable();
+      // fallback dimensions
+      const width =
+        container.clientWidth || 800;
+
+      const height =
+        container.clientHeight || 600;
+
+      console.log("Container size:", width, height);
+
+      // prevent empty chart rendering
+      if (!rows.length) {
+
+        console.log("No rows to display");
+
+        return;
+      }
+
+      const data =
+        new google.visualization.DataTable();
 
       data.addColumn('string', 'From');
       data.addColumn('string', 'To');
       data.addColumn('number', 'Weight');
 
       data.addRows(rows);
-
-      // ✔ FIXED: iframe-safe sizing
-      const width = container.clientWidth;
-      const height = container.clientHeight;
 
       const colors = [
         '#3366CC',
@@ -158,29 +196,55 @@
         sankey: {
 
           node: {
+
             width: 20,
+
             nodePadding: 40,
+
             label: {
+
               fontSize: 14,
               color: '#000'
+
             }
           },
 
           link: {
+
             colorMode: 'target',
+
             colors: colors
+
           }
         }
       };
 
-      const chart = new google.visualization.Sankey(container);
-      chart.draw(data, options);
+      try {
+
+        const chart =
+          new google.visualization.Sankey(
+            container
+          );
+
+        chart.draw(data, options);
+
+      }
+      catch(err) {
+
+        console.error(
+          "Chart draw error:",
+          err
+        );
+
+      }
     }
 
   </script>
 </head>
 
 <body>
+
   <div id="sankey_basic"></div>
+
 </body>
 </html>
