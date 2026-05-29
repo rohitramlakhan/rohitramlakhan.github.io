@@ -44,6 +44,9 @@
       "&returnGeometry=false" +
       "&f=json";
 
+    // -----------------------------------
+    // COUNTRY GROUPING
+    // -----------------------------------
     function normalizeCountry(v) {
 
       let c = (v || "")
@@ -58,6 +61,9 @@
       return allowed.includes(c) ? c : "OTHER";
     }
 
+    // -----------------------------------
+    // LOAD DATA
+    // -----------------------------------
     async function loadArcGISData() {
 
       try {
@@ -76,10 +82,12 @@
           let to   = normalizeCountry(a.Bestemming_Land);
           let val  = Number(a.Lading) || 1;
 
+          // NL → others
           if (from === "NL" && to !== "NL") {
             outbound.set(to, (outbound.get(to) || 0) + val);
           }
 
+          // others → NL
           if (to === "NL" && from !== "NL") {
             inbound.set(from, (inbound.get(from) || 0) + val);
           }
@@ -112,14 +120,15 @@
     }
 
     // -----------------------------------
-    // DRAW SANKEY + CLICK EVENT
+    // DRAW SANKEY + CLICK FILTER
     // -----------------------------------
     function drawChart(rows) {
 
       const container =
         document.getElementById('sankey_basic');
 
-      const data = new google.visualization.DataTable();
+      const data =
+        new google.visualization.DataTable();
 
       data.addColumn('string', 'From');
       data.addColumn('string', 'To');
@@ -170,7 +179,7 @@
       chart.draw(data, options);
 
       // -----------------------------------
-      // CLICK EVENT → SEND TO EXPERIENCE BUILDER
+      // CLICK → UPDATE EXPERIENCE BUILDER URL
       // -----------------------------------
       google.visualization.events.addListener(chart, 'select', function () {
 
@@ -182,7 +191,6 @@
 
         const label = data.getValue(row, 1);
 
-        // extract country
         const match = label.match(/NL → ([A-Z]+)/);
         if (!match) return;
 
@@ -190,19 +198,23 @@
 
         console.log("Clicked country:", country);
 
-        // 1. Send message to Experience Builder
-        window.parent.postMessage({
-          type: "filter-country",
-          country: country
-        }, "*");
-
-        // 2. Optional URL sync (backup)
         try {
-          const url = new URL(window.parent.location);
-          url.searchParams.set("country", country);
-          window.parent.history.replaceState({}, "", url);
+
+          const parentUrl =
+            new URL(window.parent.location.href);
+
+          parentUrl.searchParams.set(
+            "country",
+            country
+          );
+
+          window.parent.location.href =
+            parentUrl.toString();
+
         }
-        catch(e) {}
+        catch (e) {
+          console.log("URL update failed:", e);
+        }
 
       });
 
